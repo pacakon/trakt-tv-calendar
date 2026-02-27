@@ -1,4 +1,3 @@
-}
 import requests
 from datetime import datetime
 from ics import Calendar, Event
@@ -40,4 +39,6 @@ for item in data:
 os.makedirs("docs", exist_ok=True)
 
 with open("docs/premieres.ics", "w") as f:
-    f.writelines(cal
+    f.writelines(cal)
+
+print("Calendar generated.")

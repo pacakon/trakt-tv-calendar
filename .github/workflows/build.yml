@@ -1,4 +1,3 @@
-}
 name: Generate TV Calendar
 
 on:
@@ -11,19 +10,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: "3.11"
 
-      - run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
 
       - name: Generate calendar
         env:
           TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
           TRAKT_ACCESS_TOKEN: ${{ secrets.TRAKT_ACCESS_TOKEN }}
-        run: python generate_calendar.py
+        run: |
+          python generate_calendar.py
 
       - name: Commit ICS
         run: |
@@ -31,4 +35,4 @@ jobs:
           git config user.email "actions@github.com"
           git add docs/premieres.ics
           git commit -m "Update calendar" || echo "No changes"
-          git pus
+          git push

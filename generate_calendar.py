@@ -50,6 +50,7 @@ def refresh_access_token():
     r.raise_for_status()
 
     data = r.json()
+    print("DEBUG_REFRESH_TOKEN:", data.get("refresh_token"))
     
     send_refresh_token_email(data["refresh_token"])
     

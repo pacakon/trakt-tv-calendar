@@ -69,9 +69,10 @@ headers = {
 
 resp = requests.get(url, headers=headers)
 
-ACCESS_TOKEN, REFRESH_TOKEN = refresh_access_token()
-headers["Authorization"] = f"Bearer {ACCESS_TOKEN}"
-resp = requests.get(url, headers=headers)
+if resp.status_code == 401:
+    ACCESS_TOKEN, REFRESH_TOKEN = refresh_access_token()
+    headers["Authorization"] = f"Bearer {ACCESS_TOKEN}"
+    resp = requests.get(url, headers=headers)
 
 resp.raise_for_status()
 data = resp.json()

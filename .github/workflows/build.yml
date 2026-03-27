@@ -1,8 +1,8 @@
-name: Generate TV Calendar
+name: Build Calendar
 
 on:
   schedule:
-    - cron: "0 5 * * *"
+    - cron: "0 */6 * * *"   # každých 6 hodin
   workflow_dispatch:
 
 jobs:
@@ -10,36 +10,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      # 1) Načtení token_state.json z předchozího běhu
+      - name: Restore token state
+        uses: actions/cache@v3
+        with:
+          path: token_state.json
+          key: trakt-token-state
+
+      # 2) Nastavení Pythonu
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install requests
 
-      - name: Generate calendar
+      # 3) Maskování tokenů v logu
+      - name: Mask secrets
+        run: |
+          echo "::add-mask::${{ secrets.TRAKT_REFRESH_TOKEN }}"
+          echo "::add-mask::${{ secrets.TRAKT_CLIENT_ID }}"
+          echo "::add-mask::${{ secrets.TRAKT_CLIENT_SECRET }}"
+
+      # 4) Spuštění skriptu
+      - name: Run script
         env:
           TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
-          TRAKT_ACCESS_TOKEN: ${{ secrets.TRAKT_ACCESS_TOKEN }}
           TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+          TRAKT_REDIRECT_URI: ${{ secrets.TRAKT_REDIRECT_URI }}
           TRAKT_REFRESH_TOKEN: ${{ secrets.TRAKT_REFRESH_TOKEN }}
+
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASS: ${{ secrets.SMTP_PASS }}
-          REFRESH_TOKEN_TO: ${{ secrets.REFRESH_TOKEN_TO }}
-        run: |
-          python generate_calendar.py
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+        run: python generate_calendar.py
 
-      - name: Commit ICS
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add docs/premieres.ics
-          git commit -m "Update calendar" || echo "No changes"
-          git push
+      # 5) Uložení token_state.json pro další běh
+      - name: Save token state
+        uses: actions/cache@v3
+        with:
+          path: token_state.json
+          key: trakt-token-state

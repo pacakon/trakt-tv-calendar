@@ -63,52 +63,6 @@ jobs:
         if: env.FAIL_COUNT == '3'
         run: |
           python3 - << 'EOF'
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import os
-
-msg = MIMEMultipart()
-msg["From"] = os.environ["SMTP_USER"]
-msg["To"] = os.environ["REFRESH_TOKEN_TO"]
-msg["Subject"] = "⚠️ Trakt refresh token selhal 3 dny po sobě"
-
-body = """Ahoj Ondro,
-
-refresh token selhal 3 dny po sobě.
-Je potřeba udělat ruční device flow a vložit nový refresh token do token_state.json.
-
-Jakmile to uděláš, systém se automaticky opraví.
-
-– Tvůj GitHub workflow
-"""
-msg.attach(MIMEText(body, "plain"))
-
-with smtplib.SMTP(os.environ["SMTP_HOST"], int(os.environ["SMTP_PORT"])) as server:
-    server.starttls()
-    server.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
-    server.send_message(msg)
-EOF
-        env:
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASS: ${{ secrets.SMTP_PASS }}
-          REFRESH_TOKEN_TO: ${{ secrets.REFRESH_TOKEN_TO }}
-
-      # ---------------------------
-      # BUILD CALENDAR
-      # ---------------------------
-      - name: Build calendar
-        run: python build_calendar.py
-
-      # ---------------------------
-      # COMMIT CHANGES (ICS + FAIL COUNT)
-      # ---------------------------
-      - name: Commit changes
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git add docs/premieres.ics refresh_fail_count.txt
-          git commit -m "Update calendar and fail count" || echo "No changes"
-          git push
+          import smtplib
+          from email.mime.text import MIMEText
+          from email.mime.multipart import MIMEMultipart

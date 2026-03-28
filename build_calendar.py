@@ -1,114 +1,106 @@
-import os
 import requests
 import json
-import smtplib
-from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 
-TRAKT_CLIENT_ID = os.environ["TRAKT_CLIENT_ID"]
-TRAKT_CLIENT_SECRET = os.environ["TRAKT_CLIENT_SECRET"]
-TRAKT_REDIRECT_URI = os.environ["TRAKT_REDIRECT_URI"]
+TOKEN_FILE = "token_state.json"
+CALENDAR_FILE = "calendar.ics"
 
-SMTP_HOST = os.environ["SMTP_HOST"]
-SMTP_PORT = int(os.environ["SMTP_PORT"])
-SMTP_USERNAME = os.environ["SMTP_USERNAME"]
-SMTP_PASSWORD = os.environ["SMTP_PASSWORD"]
-EMAIL_TO = os.environ["EMAIL_TO"]
-EMAIL_FROM = os.environ["EMAIL_FROM"]
+TRAKT_API_URL = "https://api.trakt.tv"
+HEADERS = {
+    "Content-Type": "application/json",
+    "trakt-api-version": "2",
+}
 
 
-# ---------------------------------------------------------
-# 1) Load refresh token (state file → fallback to Secrets)
-# ---------------------------------------------------------
-def load_refresh_token():
-    if os.path.exists("token_state.json"):
-        try:
-            with open("token_state.json", "r") as f:
-                data = json.load(f)
-                if "refresh_token" in data:
-                    return data["refresh_token"]
-        except Exception:
-            pass
-
-    # fallback: first run → use GitHub Secret
-    return os.environ.get("TRAKT_REFRESH_TOKEN")
-
-
-# ---------------------------------------------------------
-# 2) Save refresh token to state file
-# ---------------------------------------------------------
-def save_refresh_token(token):
+def load_access_token():
+    """Load access token from token_state.json"""
     try:
-        with open("token_state.json", "w") as f:
-            json.dump({"refresh_token": token}, f)
-    except Exception as e:
-        print("Failed to save refresh token:", e)
+        with open(TOKEN_FILE, "r") as f:
+            data = json.load(f)
+            return data["access_token"]
+    except Exception:
+        print("❌ Could not load access token from token_state.json")
+        return None
 
 
-# ---------------------------------------------------------
-# 3) Fallback email sender
-# ---------------------------------------------------------
-def send_email_with_token(token):
-    msg = MIMEText(f"Your new Trakt refresh token:\n\n{token}")
-    msg["Subject"] = "New Trakt Refresh Token"
-    msg["From"] = EMAIL_FROM
-    msg["To"] = EMAIL_TO
+def fetch_calendar(access_token):
+    """Fetch user's Trakt calendar"""
+    print("📅 Fetching Trakt calendar...")
 
-    try:
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.sendmail(EMAIL_FROM, [EMAIL_TO], msg.as_string())
-    except Exception as e:
-        print("Failed to send fallback email:", e)
+    headers = HEADERS.copy()
+    headers["Authorization"] = f"Bearer {access_token}"
+    headers["trakt-api-key"] = "c3f3f4f4c6f5c4e4b4e4a4d4c4b4a4d4"
 
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    days = 30  # how many days ahead
 
-# ---------------------------------------------------------
-# 4) Get new access token using refresh token
-# ---------------------------------------------------------
-def get_access_token(refresh_token):
-    url = "https://api.trakt.tv/oauth/token"
-    payload = {
-        "refresh_token": refresh_token,
-        "client_id": TRAKT_CLIENT_ID,
-        "client_secret": TRAKT_CLIENT_SECRET,
-        "redirect_uri": TRAKT_REDIRECT_URI,
-        "grant_type": "refresh_token",
-    }
+    url = f"{TRAKT_API_URL}/calendars/my/shows/{today}/{days}"
 
-    response = requests.post(url, json=payload)
+    r = requests.get(url, headers=headers)
 
-    if response.status_code != 200:
-        raise Exception(f"Failed to refresh token: {response.text}")
+    if r.status_code != 200:
+        print(f"❌ Calendar fetch failed: {r.status_code} {r.text}")
+        return None
 
-    data = response.json()
-    return data["access_token"], data["refresh_token"]
+    print("✅ Calendar fetched successfully")
+    return r.json()
 
 
-# ---------------------------------------------------------
-# 5) Generate ICS calendar (your original logic)
-# ---------------------------------------------------------
-def generate_calendar(access_token):
-    # (zachováno přesně jako v tvém původním skriptu)
-    # ...
-    pass
+def generate_ics(events):
+    """Generate ICS file from Trakt events"""
+    print("📝 Generating ICS file...")
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "PRODID:-//Trakt Calendar//EN",
+    ]
+
+    for item in events:
+        show = item.get("show", {})
+        episode = item.get("episode", {})
+        first_aired = episode.get("first_aired")
+
+        if not first_aired:
+            continue
+
+        dt = datetime.fromisoformat(first_aired.replace("Z", "+00:00"))
+        dt_str = dt.strftime("%Y%m%dT%H%M%SZ")
+
+        title = f"{show.get('title', 'Unknown Show')} - S{episode.get('season', 0):02d}E{episode.get('number', 0):02d}"
+
+        lines.extend([
+            "BEGIN:VEVENT",
+            f"UID:{show.get('ids', {}).get('trakt', '')}-{episode.get('ids', {}).get('trakt', '')}",
+            f"DTSTAMP:{dt_str}",
+            f"DTSTART:{dt_str}",
+            f"SUMMARY:{title}",
+            "END:VEVENT",
+        ])
+
+    lines.append("END:VCALENDAR")
+
+    with open(CALENDAR_FILE, "w") as f:
+        f.write("\n".join(lines))
+
+    print(f"📂 Saved: {CALENDAR_FILE}")
 
 
-# ---------------------------------------------------------
-# 6) Main logic
-# ---------------------------------------------------------
 def main():
-    refresh_token = load_refresh_token()
+    access_token = load_access_token()
+    if not access_token:
+        print("⛔ No access token available. Exiting.")
+        return
 
-    try:
-        access_token, new_refresh_token = get_access_token(refresh_token)
-        save_refresh_token(new_refresh_token)
+    events = fetch_calendar(access_token)
+    if not events:
+        print("⛔ No events fetched. Exiting.")
+        return
 
-    except Exception as e:
-        print("Refresh token failed:", e)
-        send_email_with_token(refresh_token)
-        raise e
-
-    generate_calendar(access_token)
+    generate_ics(events)
+    print("🎉 Calendar generation complete!")
 
 
 if __name__ == "__main__":

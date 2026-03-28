@@ -2,7 +2,60 @@ name: Build Calendar
 
 on:
   schedule:
-    - cron: "0 */6 * * *"   # každých 6 hodin
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      # Restore token_state.json from previous run
+      - name: Restore token state
+        uses: actions/cache@v3
+        with:
+          path: token_state.json
+          key: trakt-token-state
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      # NEW: Device Flow token manager
+      - name: Ensure Trakt token (Device Code Flow)
+        env:
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+        run: |
+          python token_manager.py
+
+      # Your existing calendar generator
+      - name: Run calendar generator
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+        run: |
+          python generate_calendar.py
+
+      # Save updated token_state.json
+      - name: Save token state
+        uses: actions/cache@v3
+        with:
+          path: token_state.json
+          key: trakt-token-state
+
   workflow_dispatch:
 
 jobs:

@@ -29,7 +29,7 @@ jobs:
         run: |
           pip install requests
 
-      # NEW: Device Flow token manager
+      # Device Flow token manager
       - name: Ensure Trakt token (Device Code Flow)
         env:
           TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
@@ -50,62 +50,6 @@ jobs:
           python generate_calendar.py
 
       # Save updated token_state.json
-      - name: Save token state
-        uses: actions/cache@v3
-        with:
-          path: token_state.json
-          key: trakt-token-state
-
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
-      # 1) Načtení token_state.json z předchozího běhu
-      - name: Restore token state
-        uses: actions/cache@v3
-        with:
-          path: token_state.json
-          key: trakt-token-state
-
-      # 2) Nastavení Pythonu
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: pip install requests
-
-      # 3) Maskování tokenů v logu
-      - name: Mask secrets
-        run: |
-          echo "::add-mask::${{ secrets.TRAKT_REFRESH_TOKEN }}"
-          echo "::add-mask::${{ secrets.TRAKT_CLIENT_ID }}"
-          echo "::add-mask::${{ secrets.TRAKT_CLIENT_SECRET }}"
-
-      # 4) Spuštění skriptu
-      - name: Run script
-        env:
-          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
-          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
-          TRAKT_REDIRECT_URI: ${{ secrets.TRAKT_REDIRECT_URI }}
-          TRAKT_REFRESH_TOKEN: ${{ secrets.TRAKT_REFRESH_TOKEN }}
-
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-        run: python generate_calendar.py
-
-      # 5) Uložení token_state.json pro další běh
       - name: Save token state
         uses: actions/cache@v3
         with:

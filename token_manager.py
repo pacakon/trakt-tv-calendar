@@ -1,113 +1,42 @@
-import json
-import os
-import time
-from pathlib import Path
-import requests
+name: Build Calendar
 
-TRAKT_API_URL = "https://api.trakt.tv"
-DEVICE_CODE_URL = f"{TRAKT_API_URL}/oauth/device/code"
-DEVICE_TOKEN_URL = f"{TRAKT_API_URL}/oauth/device/token"
-TOKEN_STATE_PATH = Path("token_state.json")
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * *"
 
-CLIENT_ID = os.environ["TRAKT_CLIENT_ID"]
-CLIENT_SECRET = os.environ["TRAKT_CLIENT_SECRET"]
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-def load_token_state():
-    if not TOKEN_STATE_PATH.exists():
-        return None
-    with TOKEN_STATE_PATH.open("r", encoding="utf-8") as f:
-        return json.load(f)
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
 
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pytz
 
-def save_token_state(data):
-    with TOKEN_STATE_PATH.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+      - name: Refresh Trakt token (use refresh_token first)
+        run: |
+          echo "Running token_manager.py to refresh token..."
+          python token_manager.py --no-device-flow
 
+      - name: Build calendar
+        run: |
+          echo "Running build_calendar.py..."
+          python build_calendar.py
 
-def refresh_token(state):
-    refresh_token = state.get("refresh_token")
-    if not refresh_token:
-        return None
-
-    resp = requests.post(
-        f"{TRAKT_API_URL}/oauth/token",
-        json={
-            "refresh_token": refresh_token,
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "redirect_uri": "urn:ietf:wg:oauth:2.0:oob",
-            "grant_type": "refresh_token",
-        },
-        headers={"Content-Type": "application/json"},
-    )
-
-    if resp.status_code != 200:
-        print(f"[token_manager] Refresh failed: {resp.status_code} {resp.text}")
-        return None
-
-    data = resp.json()
-    save_token_state(data)
-    print("[token_manager] Token refreshed successfully")
-    return data
-
-
-def start_device_flow():
-    resp = requests.post(
-        DEVICE_CODE_URL,
-        json={"client_id": CLIENT_ID},
-        headers={"Content-Type": "application/json"},
-    )
-    resp.raise_for_status()
-    data = resp.json()
-
-    device_code = data["device_code"]
-    user_code = data["user_code"]
-    verification_url = data["verification_url"]
-    interval = data.get("interval", 5)
-    expires_in = data.get("expires_in", 600)
-
-    print("[token_manager] Trakt device authorization required.")
-    print(f"[token_manager] Go to: {verification_url}")
-    print(f"[token_manager] Enter code: {user_code}")
-    print("[token_manager] This is a one-time action.")
-
-    start = time.time()
-    while True:
-        if time.time() - start > expires_in:
-            raise RuntimeError("Device code expired before authorization.")
-
-        resp = requests.post(
-            DEVICE_TOKEN_URL,
-            json={
-                "code": device_code,
-                "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
-            },
-            headers={"Content-Type": "application/json"},
-        )
-
-        if resp.status_code == 200:
-            token_data = resp.json()
-            save_token_state(token_data)
-            print("[token_manager] Device authorized and token obtained.")
-            return token_data
-
-        time.sleep(interval)
-
-
-def ensure_token():
-    state = load_token_state()
-
-    if state:
-        refreshed = refresh_token(state)
-        if refreshed:
-            return refreshed
-        print("[token_manager] Refresh failed, falling back to device flow.")
-
-    return start_device_flow()
-
-
-if __name__ == "__main__":
-    ensure_token()
-    print("[token_manager] Access token ready.")
+      - name: Commit updated token_state.json
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add token_state.json
+          git commit -m "Update token_state.json" || echo "No changes to commit"
+          git push

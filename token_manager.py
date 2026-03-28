@@ -1,15 +1,13 @@
 import json
 import os
-import sys
 import time
 from pathlib import Path
-
 import requests
 
 TRAKT_API_URL = "https://api.trakt.tv"
 DEVICE_CODE_URL = f"{TRAKT_API_URL}/oauth/device/code"
 DEVICE_TOKEN_URL = f"{TRAKT_API_URL}/oauth/device/token"
-TOKEN_STATE_PATH = Path(os.getenv("TRAKT_TOKEN_STATE_PATH", "token_state.json"))
+TOKEN_STATE_PATH = Path("token_state.json")
 
 CLIENT_ID = os.environ["TRAKT_CLIENT_ID"]
 CLIENT_SECRET = os.environ["TRAKT_CLIENT_SECRET"]
@@ -23,7 +21,6 @@ def load_token_state():
 
 
 def save_token_state(data):
-    TOKEN_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with TOKEN_STATE_PATH.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
@@ -73,7 +70,7 @@ def start_device_flow():
     print("[token_manager] Trakt device authorization required.")
     print(f"[token_manager] Go to: {verification_url}")
     print(f"[token_manager] Enter code: {user_code}")
-    print(f"[token_manager] This is a one-time action per device.")
+    print("[token_manager] This is a one-time action.")
 
     start = time.time()
     while True:
@@ -96,35 +93,21 @@ def start_device_flow():
             print("[token_manager] Device authorized and token obtained.")
             return token_data
 
-        if resp.status_code in (400, 401):
-            # authorization_pending / slow_down / invalid_grant etc.
-            time.sleep(interval)
-            continue
-
-        print(f"[token_manager] Unexpected device token response: {resp.status_code} {resp.text}")
         time.sleep(interval)
 
 
 def ensure_token():
     state = load_token_state()
 
-    # 1) Try refresh if we have a state
     if state:
         refreshed = refresh_token(state)
         if refreshed:
             return refreshed
         print("[token_manager] Refresh failed, falling back to device flow.")
 
-    # 2) No valid state or refresh failed → device flow
-    token_data = start_device_flow()
-    return token_data
+    return start_device_flow()
 
 
 if __name__ == "__main__":
-    try:
-        token = ensure_token()
-        # Optionally print access token if another script wants to read it from stdout
-        print(f"[token_manager] Access token ready.")
-    except Exception as e:
-        print(f"[token_manager] Fatal error: {e}")
-        sys.exit(1)
+    ensure_token()
+    print("[token_manager] Access token ready.")
